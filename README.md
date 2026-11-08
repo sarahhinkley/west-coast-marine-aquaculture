@@ -1,7 +1,7 @@
 # Investigating Potential West Coast Marine Aquaculture
 
 ## Purpose
-The analysis completed in this repository is intended to determining which Exclusive Economic Zones (EEZ) on the West Coast of the U.S. are best suited to developing marine aquaculture for several species (including oysters and red rock shrimp). Locations suitable for species were determined by meeting conditions for the species' optimal sea surface temperature (SST) AND depth. In this analysis, a function was made to make the workflow generalizable to determine the optimal marine aquaculture location for any species along the west coast. The output of the function is a map of EEZ regions colored by the amount of suitable area in each EEZ region based on the species, its minimum/maximum SST, and its minimum/maximum depth. 
+The analysis completed in this repository is intended to determine which Exclusive Economic Zones (EEZ) on the West Coast of the U.S. are best suited to developing marine aquaculture for several species (including oysters and red rock shrimp). Locations suitable for species were determined by meeting conditions for the species' optimal sea surface temperature (SST) AND depth. In this analysis, a function was made to make the workflow generalizable to determine the optimal marine aquaculture location for any species along the west coast. The output of the function is a map of EEZ regions colored by the amount of suitable area in each EEZ region based on the species, its minimum/maximum SST, and its minimum/maximum depth. 
 
 ## Repository Overview
 - `west-coast-aquaculture-analysis.qmd`: Quarto document containing all code, maps, and written interpretation.
