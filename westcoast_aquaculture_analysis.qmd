@@ -14,6 +14,8 @@ execute:
  results: hide
 ---
 
+### Introduction
+This analysis identifies which West Coast Exclusive Economic Zones (EEZs) are most suitable for marine aquaculture of oysters and red rock shrimp. Suitable locations are defined as areas where both average sea surface temperature and ocean depth fall within each species’ preferred range. The total suitable area is then calculated for each EEZ to rank the zones.
 
 ## Load Packages
 ```{r}
@@ -106,15 +108,23 @@ cat("Origins match:", all(round(origin(avg_sst_C), 8) ==
                             round(origin(resampled_depth), 8)), "\n")
 cat("Extents match:", ext(avg_sst_C) == ext(resampled_depth), "\n")
 
-# Stack SST and depth as a final alignment check:
-# If these rasters did not share the same grid, `c()` wouldn't work and there would be an error 
-temp_depth <- c(avg_sst_C, resampled_depth) 
+# Stop with an error if the rasters do not share the same grid
+stopifnot(compareGeom(avg_sst_C, resampled_depth))
 ```
 
 ## Create a function to look at the suitable areas within West Coast EEZs for any species
 ```{r}
 # Function that maps the total suitable area for a species within each West Coast EEZ
 suitable_areas <- function(minimum_sst, maximum_sst, minimum_depth, maximum_depth, species_name) {
+    # Stop if the species' ranges are entered in the wrong order
+    if (minimum_sst >= maximum_sst) {
+    stop("minimum_sst must be less than maximum_sst.")
+    }
+
+    if (minimum_depth >= maximum_depth) {
+    stop("minimum_depth must be less than maximum_depth.")
+    }
+
     # ----Reclassify SST & depth values into suitable (1) and unsuitable (0)----
     
     # Reclassification matrix for SST:
@@ -144,7 +154,7 @@ suitable_areas <- function(minimum_sst, maximum_sst, minimum_depth, maximum_dept
     depth_suitable <- classify(resampled_depth, rcl = depth_rcl)
 
 
-    # ----Find locations that satistfy the species SST and depth requirements----
+    # ----Find locations that satisfy the species SST and depth requirements----
 
     # Stack the SST and depth suitability rasters into one two-layer raster
     sst_depth_zones <- c(sst_suitable, depth_suitable)
@@ -209,7 +219,7 @@ suitable_areas <- function(minimum_sst, maximum_sst, minimum_depth, maximum_dept
         tm_compass(position = c("right", "top")) +
         tmap_options(component.autoscale = FALSE) +
         tm_borders(lwd = .8) +
-        tm_title(paste("Suitable", species_name, "Habitats by West Coast EEZ"), 
+        tm_title(paste("Suitable", species_name, "Habitat by West Coast EEZ"), 
                  size = 0.80)
 
 }
@@ -230,8 +240,7 @@ suitable_areas(minimum_sst = 10, maximum_sst = 20, minimum_depth = -60, maximum_
 ```
 
 ### Interpretation of the map
-The optimal growth conditions for red rock shrimp are between 10 degrees Celsius and 20 degrees Celsius and between sea level and 60 m below sea level. The map featured above shows the Washington EEZ has the most amount of suitable area for red rock shrimp growth (5,630 km²). On the other hand, the Northern California EEZ has the least amount of suitable area for oyster growth (2,311 km²).
-
+The optimal growth conditions for red rock shrimp are between 10 degrees Celsius and 20 degrees Celsius and between sea level and 60 m below sea level. The map featured above shows the Washington EEZ has the most amount of suitable area for red rock shrimp growth (5,630 km²). On the other hand, the Northern California EEZ has the least amount of suitable area for red rock shrimp growth (2,311 km²). Northern California ranked lowest for both species, which suggests that conditions in this zone may limit aquaculture potential in general.
 
 
 ### Data Citations: 
