@@ -15,7 +15,7 @@ execute:
 ---
 
 ### Introduction
-This analysis identifies which West Coast Exclusive Economic Zones (EEZs) are most suitable for marine aquaculture of oysters and red rock shrimp. Suitable locations are defined as areas where both average sea surface temperature and ocean depth fall within each species’ preferred range. The total suitable area is then calculated for each EEZ to rank the zones.
+This analysis is intended to determine which Exclusive Economic Zones (EEZ) on the West Coast of the U.S. are best suited to developing marine aquaculture for several species (including oysters and red rock shrimp). Locations suitable for species were determined by meeting conditions for the species' optimal sea surface temperature (SST) AND depth. In this analysis, a function was made to make the workflow generalizable to determine the optimal marine aquaculture location for any species along the west coast. The output of the function is a map of EEZ regions colored by the amount of suitable area in each EEZ region based on the species, its minimum/maximum SST, and its minimum/maximum depth.
 
 ## Load Packages
 ```{r}
@@ -107,9 +107,13 @@ cat("Resolutions match:", all(res(avg_sst_C) == res(resampled_depth)), "\n")
 cat("Origins match:", all(round(origin(avg_sst_C), 8) == 
                             round(origin(resampled_depth), 8)), "\n")
 cat("Extents match:", ext(avg_sst_C) == ext(resampled_depth), "\n")
+```
 
-# Stop with an error if the rasters do not share the same grid
-stopifnot(compareGeom(avg_sst_C, resampled_depth))
+```{r}
+#| results: hide
+# Stack SST and depth as a final alignment check:
+# c() only works if the rasters share the same grid (will error if don't match)
+c(avg_sst_C, resampled_depth)
 ```
 
 ## Create a function to look at the suitable areas within West Coast EEZs for any species
