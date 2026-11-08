@@ -40,7 +40,7 @@ depth <- rast('data/depth.tif')
 # Read exclusive economic zones (EEZ) data
 eez <- st_read('data/wc_regions_clean.shp')
 
-# Combine the SST(2008-2012) rasters into a raster stack
+# Combine the SST(2008-2012) rasters into a raster stack (one layer per year)
 sst <- c(sst_2008, sst_2009, sst_2010, sst_2011, sst_2012)
 
 ```
@@ -50,20 +50,23 @@ sst <- c(sst_2008, sst_2009, sst_2010, sst_2011, sst_2012)
 #| results: hold
 
 # ----Checking if the SST data, EEZ data, and depth data have the same CRS----
+# Spatial operations require matching CRS, so print a message if they match and raise a warning if they do not match
+
+# Compare SST and depth
 if(st_crs(sst) == st_crs(depth)){
   print("sst and depth CRS match!")
 } else {
   warning("sst and depth CRS do not match.")
 }
 
-
+# Compare SST and EEZ
 if(st_crs(sst) == st_crs(eez)){
   print("sst and eez CRS match!")
 } else {
   warning("sst and eez CRS do not match.")
 }
 
-
+# Compare EEZ and depth
 if(st_crs(eez) == st_crs(depth)){
   print("eez and depth CRS match!")
 } else {
@@ -75,17 +78,17 @@ if(st_crs(eez) == st_crs(depth)){
 ```{r}
 #| results: hold
 
-# Mean SST from 2008-2012 in Kelvin
+# Mean SST from 2008-2012 in Kelvin (into one layer)
 avg_sst_K <- mean(sst, na.rm = TRUE)
 
 # Convert average from Kelvin to Celsius
 avg_sst_C <- avg_sst_K - 273.15
 
-# Crop depth to match SST raster
+# Crop depth to match SST raster so only study area is processed
 crop_depth <- crop(depth, ext(avg_sst_C))
 
-# Use project() to get the CRS to match
-crop_depth <- project(depth, avg_sst_C) 
+# Reproject the cropped depth to SST's CRS and align it to the SST grid
+crop_depth <- project(crop_depth, avg_sst_C) 
 
 # Resample depth to the `sst` grid so both rasters share the same resolution, origin, and extent
 # `crop_depth` provides the bathymetry values to transfer
@@ -95,21 +98,26 @@ resampled_depth <- resample(
                             avg_sst_C, 
                             method = 'bilinear'
                             ) 
+
+# Confirm the resampled depth grid matches the SST grid (all should print TRUE)
 cat("After resampling to SST grid:\n")
 cat("Resolutions match:", all(res(avg_sst_C) == res(resampled_depth)), "\n")
 cat("Origins match:", all(round(origin(avg_sst_C), 8) == 
                             round(origin(resampled_depth), 8)), "\n")
 cat("Extents match:", ext(avg_sst_C) == ext(resampled_depth), "\n")
 
-# Combine SST and Depth into a raster stack
-# This is a check that the rasters align, because otherwise c() would give an error
+# Stack SST and depth as a final alignment check:
+# If these rasters did not share the same grid, `c()` wouldn't work and there would be an error 
 temp_depth <- c(avg_sst_C, resampled_depth) 
 ```
 
 ## Create a function to look at the suitable areas within West Coast EEZs for any species
 ```{r}
+# Function that maps the total suitable area for a species within each West Coast EEZ
 suitable_areas <- function(minimum_sst, maximum_sst, minimum_depth, maximum_depth, species_name) {
-    # Reclassification matrix for sst:
+    # ----Reclassify SST & depth values into suitable (1) and unsuitable (0)----
+    
+    # Reclassification matrix for SST:
     # each row is (from, to, new value)
     # below the minimum_sst is unsuitable
     # between the minimum_sst and maximum_sst is suitable
@@ -127,19 +135,22 @@ suitable_areas <- function(minimum_sst, maximum_sst, minimum_depth, maximum_dept
                           minimum_depth, maximum_depth, 1,  
                           maximum_depth, Inf, 0),  
                          ncol = 3, byrow = TRUE)
+    
+    # Apply the reclassification matrices
 
-    # Classify rasters based on RCL
-    # Produces `avg_sst_C` raster with 0s and 1s based on suitability determined by `sst_rcl`
+    # New raster of 0s and 1s showing where SST is suitable
     sst_suitable   <- classify(avg_sst_C, rcl = sst_rcl) 
-    # Produces `resampled_depth` raster with 0s and 1s based on suitability determined by `depth_rcl`
+    # New raster of 0s and 1s showing where depth is suitable
     depth_suitable <- classify(resampled_depth, rcl = depth_rcl)
+
 
     # ----Find locations that satistfy the species SST and depth requirements----
 
-    # Combine rasters for suitable SST zones with suitable depth zones
+    # Stack the SST and depth suitability rasters into one two-layer raster
     sst_depth_zones <- c(sst_suitable, depth_suitable)
 
-    # Multiplying 0s and 1s to find locations that meet both SST and depth criteria
+    # Multiply the layers cell by cell: 1 * 1 = 1 only where both SST and depth
+    # are suitable (any 0 makes the result 0)
     suitable_loc <- lapp(sst_depth_zones, fun = function(sst, depth) sst * depth)
 
 
@@ -148,9 +159,9 @@ suitable_areas <- function(minimum_sst, maximum_sst, minimum_depth, maximum_dept
     # Set unsuitable cells (0) to NA so only suitable cells remain
     suitable_loc[suitable_loc == 0] <- NA
 
-    # Rasterize the EEZ polygons onto the suitability grid, so each cell holds its EEZ name
+    # Rasterize the EEZ polygons onto the suitability grid so each cell holds 
+    # its EEZ region name
     eez_rast <- rasterize(eez, suitable_loc, field = "rgn")
-
 
     # Keep only suitable cells that fall inside an EEZ
     suitable_eez <- mask(suitable_loc, eez_rast)
@@ -159,38 +170,47 @@ suitable_areas <- function(minimum_sst, maximum_sst, minimum_depth, maximum_dept
     # ----Find the area of grid cells----
 
     # Calculate the area of each cell in km^2
-    # Cell area varies with latitude so it cannot be determined from resolution alone
+    # Cell area varies with latitude so it cannot be determined from 
+    # resolution alone
     cell_area <- cellSize(suitable_eez, unit = "km") 
 
-    # Area of each suitable cell (NA cells stay NA)
+    # Area of each suitable cell (unsuitable cells stay NA)
     suitable_area <- suitable_eez * cell_area
 
 
     # ----Find the total suitable area within each EEZ----
 
     # Sum the suitable area within each EEZ zone
-    eez_suitable_area <- zonal(suitable_area, eez_rast, fun = "sum", na.rm = TRUE) |> 
-        # rename the `lyr1` column that lists the total suitable area within each EEZ to `area`
-        rename(area = lyr1)
+    eez_suitable_area <- zonal(suitable_area, 
+                                eez_rast, 
+                                fun = "sum", 
+                                na.rm = TRUE) |> 
+                                  # rename `lyr1` column that lists total
+                                  # suitable area within each EEZ to `area`
+                                  rename(area = lyr1)
 
-    # Create a tibble of suitable zones
+    # Create a tibble of `eez_suitable_area` to use for joining
     zones_tibble <- as_tibble(eez_suitable_area)
 
-    # Joining suitable area to EEZ polygons
+    # Join each EEZ's total suitable area to the EEZ polygons by region name
     eez_zones <- left_join(eez, zones_tibble, by = "rgn")
+  
 
-    # Create map
+    # ----Map the total suitable area in each EEZ----
     tm_shape(eez_zones) + 
         tm_basemap("OpenStreetMap") +
         tm_fill(
         fill = "area",
         fill.legend = tm_legend(title = "Suitable Area (km²)")
         ) +
-        tm_scalebar(position = c("left", "bottom"), breaks = c(0, 250, 500), text.size = 0.6) +
+        tm_scalebar(position = c("left", "bottom"), 
+                    breaks = c(0, 250, 500), 
+                    text.size = 0.6) +
         tm_compass(position = c("right", "top")) +
         tmap_options(component.autoscale = FALSE) +
         tm_borders(lwd = .8) +
-        tm_title(paste("Suitable", species_name, "Habitats by West Coast EEZ"), size = 0.80)
+        tm_title(paste("Suitable", species_name, "Habitats by West Coast EEZ"), 
+                 size = 0.80)
 
 }
 ```
@@ -210,7 +230,7 @@ suitable_areas(minimum_sst = 10, maximum_sst = 20, minimum_depth = -60, maximum_
 ```
 
 ### Interpretation of the map
-The optimal growth conditions for red rock shrimp are between 10 degrees Celsius and 20 degrees Celsius and between sea level and 60 m below sea level. The map featured above shows the Washington EEZ has the most amount of suitable area for red rock shrimp growth (5,629 km²). On the other hand, the Northern California EEZ has the least amount of suitable area for oyster growth (2,311 km²).
+The optimal growth conditions for red rock shrimp are between 10 degrees Celsius and 20 degrees Celsius and between sea level and 60 m below sea level. The map featured above shows the Washington EEZ has the most amount of suitable area for red rock shrimp growth (5,630 km²). On the other hand, the Northern California EEZ has the least amount of suitable area for oyster growth (2,311 km²).
 
 
 
